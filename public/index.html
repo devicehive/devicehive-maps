@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title></title>
+    <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.2.0/dist/leaflet.css"
+      integrity="sha512-M2wvCLH6DSRazYeZRIm1JnYyh22purTM+FDB5CsyxtQJYeKq83arPe5wgbNmcFXGqiSH2XR8dT/fJISVA1r/zQ=="
+      crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.2.0/dist/leaflet.js"
+      integrity="sha512-lInM/apFSqyy1o6s89K4iQUKg6ppXEgsVxT35HbzUupEVRh2Eu9Wdl4tHj7dZO0s1uvplcYGmt3498TtHq+log=="
+      crossorigin=""></script>
+  </head>
+  <body>
+    <input class="filter-gateway" id="gateway" placeholder="filter gateway" type="text">
+    <input class="filter-mac" id="mac" placeholder="filter mac" type="text">
+    <div id="map"></div>
+    <script type="text/javascript">
+      const url = 'wss://playground.devicehive.com/api/websocket';
+      const accessToken = 'eyJhbGciOiJIUzI1NiJ9.eyJwYXlsb2FkIjp7InVzZXJJZCI6NzY1LCJhY3Rpb25zIjpbIkdldE5ldHdvcmsiLCJHZXREZXZpY2UiLCJHZXREZXZpY2VTdGF0ZSIsIkdldERldmljZU5vdGlmaWNhdGlvbiIsIkdldERldmljZUNvbW1hbmQiLCJHZXREZXZpY2VDbGFzcyIsIlJlZ2lzdGVyRGV2aWNlIiwiQ3JlYXRlRGV2aWNlTm90aWZpY2F0aW9uIiwiQ3JlYXRlRGV2aWNlQ29tbWFuZCIsIlVwZGF0ZURldmljZUNvbW1hbmQiLCJHZXRDdXJyZW50VXNlciIsIlVwZGF0ZUN1cnJlbnRVc2VyIiwiTWFuYWdlVG9rZW4iXSwibmV0d29ya0lkcyI6WyI3NjMiXSwiZGV2aWNlSWRzIjpbIioiXSwiZXhwaXJhdGlvbiI6MTUxOTg1NTIwMDAwMCwidG9rZW5UeXBlIjoiQUNDRVNTIn19.zp0FUqm_xJvzVTAoNBxPXmtZSxWJVeocq5K6WQxDs64';
+      let macs = [];
+      let deviceData = {};
+      let devices = [];
+      let macFilterInput = localStorage.getItem('macFilter') || '';
+      let gatewayFilterInput = localStorage.getItem('gatewayFilter') || 'lora-gateway-1,2';
+
+      document.getElementById('gateway').value = gatewayFilterInput;
+      document.getElementById('mac').value = macFilterInput;
+
+      const filterByGateway = () => {
+        if (!Object.keys(deviceData).length) {
+          return;
+        }
+
+        const filteredKeys = Object.keys(deviceData)
+          .filter(key =>
+            !gatewayFilterInput.length ||
+            !!gatewayFilterInput
+            .split(',')
+            .filter(val => val.trim())
+            .filter(val => !key.includes(val.trim())).length
+        );
+
+        const notFilteredKeys = Object.keys(deviceData)
+          .filter(key =>
+            !gatewayFilterInput.length ||
+            !!gatewayFilterInput
+            .split(',')
+            .filter(val => val.trim())
+            .filter(val => key.includes(val.trim())).length
+        );
+
+        filteredKeys.map((key) => {
+          deviceData[key].marker.setStyle({ opacity: 0 });
+          if (!deviceData[key].mac) return;
+          Object.keys(deviceData[key].mac).map(macKey => {
+            deviceData[key].mac[macKey].setStyle({ opacity  : 0 });
+          })
+        })
+
+        notFilteredKeys.map((key) => {
+          deviceData[key].marker.setStyle({ opacity: 1 });
+          if (!deviceData[key].mac) return;
+          Object.keys(deviceData[key].mac).map(macKey => {
+            if (!macKey.includes(macFilterInput)) return;
+            deviceData[key].mac[macKey].setStyle({ opacity: 1 });
+          })
+        })
+      }
+
+      const filterByMac = () => {
+        if (!Object.keys(deviceData).length) {
+          return;
+        }
+
+        let filteredCircles = Object.keys(deviceData).map(deviceId => {
+          const { mac } = deviceData[deviceId];
+          if (!mac) return;
+          return Object.keys(mac).map(macId => {
+            if (!macId.includes(macFilterInput)) return mac[macId];
+          })
+        })
+
+        filteredCircles = [].concat.apply([], filteredCircles).filter(item => item !== undefined);
+
+        filteredCircles.map(circle => circle.setStyle({ opacity: 0 }));
+
+        let notFilteredCircles = Object.keys(deviceData).map(deviceId => {
+          const { mac } = deviceData[deviceId];
+          if (!mac) return;
+          if (deviceData[deviceId].marker.options.opacity === 0) {
+            return;
+          }
+          return Object.keys(mac).map(macId => {
+            if (macId.includes(macFilterInput)) return mac[macId];
+          })
+        })
+
+        notFilteredCircles = [].concat.apply([], notFilteredCircles).filter(item => item !== undefined);
+
+        notFilteredCircles.map(circle => circle.setStyle({ opacity: 1 }));
+      }
+
+
+      document
+        .getElementById('gateway')
+        .addEventListener('keyup', (event) => {
+          if (event.keyCode !== 13) {
+            return;
+          }
+          localStorage.setItem('gatewayFilter', event.target.value);
+          gatewayFilterInput = event.target.value;
+          filterByGateway();
+        })
+
+      document
+        .getElementById('mac')
+        .addEventListener('keyup', (event) => {
+          if (event.keyCode !== 13) {
+            return;
+          }
+          localStorage.setItem('macFilter', event.target.value);
+
+          macFilterInput = event.target.value;
+          filterByMac();
+        })
+
+      const initSocketConn = async () => {
+        return new WebSocket(url);
+      }
+
+      const connect = async () => {
+        const socket = await initSocketConn();
+        socket.addEventListener('open', (event) => {
+          const authAction = {
+            action: 'authenticate',
+            token: accessToken
+          }
+
+          socket.send(JSON.stringify(authAction));
+          subscribeNotificatinons(socket);
+
+          socket.addEventListener('message', (msg) => {
+            const data = JSON.parse(msg.data);
+
+            switch (data.action) {
+              case 'device/list':
+                renderGateways(data.devices);
+                filterByGateway();
+                const deviceIds = data.devices.map(device => device.id);
+                const action = {
+                  action: 'notification/subscribe',
+                  deviceIds
+                }
+                socket.send(JSON.stringify(action));
+                return;
+              case 'notification/insert':
+                renderMac(data.notification);
+                return;
+              default:
+                return;
+            }
+          })
+        })
+      }
+
+      const renderMac = (notification) => {
+        const { deviceId } = notification;
+        const { mac, rssi } = notification.parameters.parameters;
+        const device = devices.find(device => device.id === deviceId);
+        const radius = countDistance(rssi);
+        if (!deviceData[deviceId]) {
+          deviceData[deviceId] = {};
+        }
+        if (!deviceData[deviceId].mac) {
+          deviceData[deviceId].mac = {};
+        }
+        if (!deviceData[deviceId].mac[mac]) {
+          deviceData[deviceId].mac[mac] = L.circle([device.data.coordinates.lat, device.data.coordinates.lng], {
+            color: 'red',
+            fillColor: '#f03',
+            fillOpacity: 0,
+            stroke: true,
+            radius
+          }).addTo(map);
+          filterByGateway();
+          filterByMac();
+          return;
+        }
+        deviceData[deviceId].mac[mac].setRadius(radius);
+      }
+
+      const subscribeNotificatinons = async (socket) => {
+        const action = {
+          action: 'device/list'
+        }
+        socket.send(JSON.stringify(action));
+      }
+
+      const countDistance = (rssi) => {
+        const n = 2;
+        const d0 = 1;
+        const P0 = -1;
+        return d0 * Math.pow(10, (P0 - rssi) / (10 * n));
+      }
+
+      const renderGateways = (gws) => {
+        devices = gws;
+        map.setView(new L.LatLng(gws[0].data.coordinates.lat, gws[0].data.coordinates.lng), 15)
+        gws.map(gw => {
+          deviceData[gw.id] = {};
+          const bounds = [[gw.data.coordinates.lat - 0.005, gw.data.coordinates.lng - 0.005], [gw.data.coordinates.lat + 0.005, gw.data.coordinates.lng + 0.005]]
+
+          deviceData[gw.id].marker = L.rectangle(bounds, {
+            stroke: true,
+            opacity: 1,
+            color: 'blue',
+            fillColor: 'blue',
+          }).addTo(map);
+        })
+      }
+
+      const initMap = () => {
+        const map = L.map('map');
+        var osmUrl='http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        var osmAttrib='Map data © <a href="http://openstreetmap.org">OpenStreetMap</a> contributors';
+        var osm = new L.TileLayer(osmUrl, {minZoom: 8, maxZoom: 12, attribution: osmAttrib});
+
+        map.setView(new L.LatLng(51.32, 32.17),9);
+        map.addLayer(osm);
+        return map;
+      }
+
+      const map = initMap();
+      connect();
+
+    </script>
+
+  </body>
+</html>
