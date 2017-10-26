@@ -45,4 +45,4 @@ init();
 
 app.use('/', require('express').static(path.join(__dirname, '/public')));
 
-server.listen(process.env.PORT || config.PORT);
+server.listen(config.PORT);
