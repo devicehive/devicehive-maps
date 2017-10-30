@@ -14,9 +14,7 @@ const getConnection = () => {
 }
 
 const fillDevices = async (connection) => {
-  for (let i = 0; i < 3; i++) {
-    connection.putDevice(`lora-gateway-${i}`, { data: data.gateways[i] });
-  }
+  data.gateways.map(device => connection.putDevice(device.deviceId, { data: device }));
 }
 
 

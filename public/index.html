@@ -165,6 +165,7 @@
       }
 
       const renderMac = (notification) => {
+        if (!notification.parameters.parameters.mac) return;
         const { deviceId } = notification;
         const { mac, rssi } = notification.parameters.parameters;
         const device = devices.find(device => device.id === deviceId);
