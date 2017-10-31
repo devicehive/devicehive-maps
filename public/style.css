@@ -27,3 +27,12 @@ body {
   width: 100vw;
   display: inline-block;
 }
+
+.connection-wrap {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-block;
+  height: 100px;
+  position: absolute;
+}
