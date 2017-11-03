@@ -230,7 +230,7 @@
 
       const renderGateways = (gws) => {
         gws.map(gw => {
-          if (!gw.data.coordinates) return;
+          if (!gw.data || !gw.data.coordinates) return;
           deviceData[gw.id] = {};
           map.setView(new L.LatLng(gw.data.coordinates.lat, gw.data.coordinates.lng), 15)
           const bounds = [[gw.data.coordinates.lat - 0.005, gw.data.coordinates.lng - 0.005], [gw.data.coordinates.lat + 0.005, gw.data.coordinates.lng + 0.005]]
